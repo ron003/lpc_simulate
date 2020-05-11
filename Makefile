@@ -5,7 +5,8 @@
  # $RCSfile: .emacs.gnu,v $
  # rev="$Revision: 1.34 $$Date: 2019/04/22 15:23:54 $";
 
-CC       = gcc -std=c11 -pedantic -D_DEFAULT_SOURCE -fsanitize=address
+#CC       = gcc -std=c11 -pedantic -D_DEFAULT_SOURCE -fsanitize=address
+CC       = gcc -std=c11 -pedantic -D_DEFAULT_SOURCE
 CFLAGS   = -g -Wall -Wextra
 CPPFLAGS = -I.
 

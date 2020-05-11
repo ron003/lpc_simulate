@@ -7,6 +7,7 @@
 	*/
 
 #include <stdio.h>		/* printf */
+#include <signal.h>		/* SIGUSR{1,2} */
 #include <pthread.h>	/* pthread_ */
 #include <unistd.h>		/* usleep */
 #include <TRACE/trace.h>
@@ -19,12 +20,17 @@ void* M4_main(void*);
 
 int main( /*int	argc, char	*argv[]*/ )
 {
+	sigset_t set;
 	pthread_t threads[2];
-
+	enum { m0_thread, m4_thread };
 	void *evbufp =  &m0m4shmem[0x10000];
 	void *EvRate = &m0m4shmem[0x100];
 	void *DAQ_Enabled = &m0m4shmem[0x200];
 
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR1);
+	sigaddset(&set, SIGUSR2);
+	sigprocmask(SIG_BLOCK, &set, NULL);
 	// The first 3 ptrs are from *FEB_test*.c
 	*(void**)&m0m4shmem[sizeof(void*)*0] = evbufp;
 	*(void**)&m0m4shmem[sizeof(void*)*1] = EvRate;
@@ -34,12 +40,23 @@ int main( /*int	argc, char	*argv[]*/ )
 
 	// Seem the M4 core is really the main core of the whole Micro-Controller.
 	// The M4_main seems to initialize everything.
-	pthread_create(&threads[1],NULL, M4_main, m0m4shmem);
-	usleep(500000);
+	pthread_create(&threads[m4_thread],NULL, M4_main, m0m4shmem);
+	usleep(500000); // make sure m4 starts and is waiting for 
 	// M0 core does the ethernet communications
-	pthread_create(&threads[0],NULL, M0_main, m0m4shmem);
-	
-	pthread_join(threads[0], NULL);
-	pthread_join(threads[1], NULL);
+	pthread_create(&threads[m0_thread],NULL, M0_main, m0m4shmem);
+
+	// https://www.linuxprogrammingblog.com/all-about-linux-signals?page=11
+
+	for (unsigned uu=0; uu<10000; ++uu) {
+		TRACE(3,"send irq SIGUSR1");
+		pthread_kill( threads[m0_thread], SIGUSR1 );
+		usleep(100000);
+		TRACE(3,"send irq SIGUSR2");
+		pthread_kill( threads[m4_thread], SIGUSR2 );
+		usleep(900000);
+	}
+
+	pthread_join(threads[m4_thread], NULL);
+	pthread_join(threads[m0_thread], NULL);
 	return (0);
 }   /* main */

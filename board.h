@@ -28,10 +28,9 @@ static void ENET_SendFrameNonBlocking(uint8_t*buf,uint16_t size){
 #define NVIC_EnableIRQ(x)         TRACE(3,"NVIC_EnableIRQ(%u)",x)
 #define Board_SSP_Init(x)         TRACE(3,"Board_SSP_Init(%p)",(void*)x)
 #define Board_ENET_Init()         TRACE(3,"Board_ENET_Init()")
-#define __disable_irq()           TRACE(3,"__disable_irq()")
-#define __enable_irq()            TRACE(3,"__enable_irq()")
 
 typedef unsigned char * addr_t;
+typedef void (*handler_t)(int);
 
 // From workspace2/lpc_chip_43xx_m0/inc/config_m0app/cmsis_43xx_m0app.h
 #ifndef HAVE_LPC43XX_M0_IRQn_Type

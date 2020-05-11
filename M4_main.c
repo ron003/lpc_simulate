@@ -65,8 +65,9 @@ int tick = 0;
 int tick2 = 0;
 float EvRate = 0; // global variable for current trigger rate evaluation
 int EvCounter = 0; // global counter variable for current trigger rate evaluation
-int DAQ_Enabled = 0; // global DAQ enable
+static int DAQ_Enabled = 0; // global DAQ enable
 int FPGA_programmed = 0;
+
 
 __RAMFUNC(RAM2) void StartDownloadFirmwareOnFPGA()
 {
@@ -100,6 +101,7 @@ __RAMFUNC(RAM2) void SysTick_Handler(void) {
 }
 
 __RAMFUNC(RAM2) void GPIO0_IRQHandler(void) {
+	TRACE(3,"GPIO0_IRQHandler called");
 	//	 Board_LED_Toggle(0);
 	Chip_PININT_ClearIntStatus(LPC_GPIO_PIN_INT, 0xff);
 	if(DAQ_Enabled==1){
@@ -112,6 +114,30 @@ __RAMFUNC(RAM2) void GPIO0_IRQHandler(void) {
 	Chip_GPIO_SetPinState(LPC_GPIO_PORT, 0x1, 13, 1); //TS_ENA
 
 }
+
+static void __disable_irq()
+{
+	sigset_t set;
+	TRACE(3,"__disable_irq() SIG_BLOCKing SIGUSR2");
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR2);
+	pthread_sigmask(SIG_BLOCK, &set, NULL);
+}
+static void __enable_irq()
+{
+	sigset_t unblock_set, block_add_set;
+	struct sigaction  new_sigaction_s={0};
+	TRACE(3,"__enable_irq() SIG_UNBLOCKing SIGUSR2 - handler GPIO0_IRQHandler");
+	sigemptyset(&unblock_set);
+	sigaddset(&unblock_set, SIGUSR2);
+	sigemptyset(&block_add_set);
+	new_sigaction_s.sa_mask = block_add_set;
+	new_sigaction_s.sa_handler = (handler_t)GPIO0_IRQHandler;
+	sigaction( SIGUSR2, &new_sigaction_s, NULL );
+	pthread_sigmask(SIG_UNBLOCK, &unblock_set, NULL);
+}
+
+
 
 __RAMFUNC(RAM2) int M4_main(void *arg) {
 	M0M4SHMEM = (uint8_t*)arg;
@@ -216,6 +242,7 @@ __RAMFUNC(RAM2) int M4_main(void *arg) {
     volatile uint8_t STOPCMDFROMM0=0;
 	while(1) {
 		STOPCMDFROMM0=*((uint8_t*)M0M4STOP);
+		TRACE(3,"STOPCMDFROMM0=%u    waiting for STOPCMDFROMM0>0",STOPCMDFROMM0);
         if(STOPCMDFROMM0>0)
         {
         	__disable_irq();
@@ -227,6 +254,7 @@ __RAMFUNC(RAM2) int M4_main(void *arg) {
         	__enable_irq();
         }
         //__WFI();
+		TRACE(3,"M4_main while(1) -- sleeping 1"); usleep(1000000);
 	}
 	return 0;
 }

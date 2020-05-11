@@ -42,14 +42,43 @@ static uint8_t*m0m4shmem;
 
 bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nblocks);
 void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblocks);
+
 /**
  * Wait for message from M4 core
  */
 void MX_CORE_IRQHandler(void) {
+	TRACE(3, "MX_CORE_IRQHandler");
 	Chip_CREG_ClearM4Event();
 	Board_LED_Toggle(0);
 
 }
+
+
+static void __disable_irq()
+{
+	sigset_t set;
+	TRACE(3,"__disable_irq() SIG_BLOCKing SIGUSR1");
+	sigemptyset(&set);
+	sigaddset(&set, SIGUSR1);
+	pthread_sigmask(SIG_BLOCK, &set, NULL);
+}
+
+static void __enable_irq()
+{
+	sigset_t unblock_set, block_add_set;
+	struct sigaction  new_sigaction_s={0};
+	TRACE(3,"__enable_irq() SIG_UNBLOCKing SIGUSR1 - handler MX_CORE_IRQHandler");
+	sigemptyset(&unblock_set);
+	sigaddset(&unblock_set, SIGUSR1); 
+	sigemptyset(&block_add_set);
+	new_sigaction_s.sa_mask = block_add_set;
+	new_sigaction_s.sa_handler = (handler_t)MX_CORE_IRQHandler;
+	sigaction( SIGUSR1, &new_sigaction_s, NULL );
+	pthread_sigmask(SIG_UNBLOCK, &unblock_set, NULL);
+	
+}
+
+
 char VersionString[32];
 
 FEBDTP_PKT pkt1;     // FEBDTP.h:77:}} FEBDTP_PKT; // packet total length 1500 bytes
@@ -58,7 +87,7 @@ uint32_t regn = 0;
 //	*((uint32_t*)M0M4SHMEM)=&evbuf
 Evbuf_t* evbufp;
 float* EvRate;
-int* DAQ_Enabled;
+static int* DAQ_Enabled;
 uint32_t CFGFPGA; //HACKABBA
 
 
@@ -87,7 +116,8 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 	DEBUGOUT("M0M4SHMEM=%p evbufp=%p",(void*)M0M4SHMEM, (void*)evbufp);
 	EvRate = (float*) (*((float**) (M0M4SHMEM + sizeof(addr_t)))); // event rate gauge pointer, see EVENT.h
 	DAQ_Enabled = (int*) (*((int**) (M0M4SHMEM + 2*sizeof(addr_t)))); // DAQ_Enabled flag pointer, see EVENT.h
-
+	TRACE(3,"M0_main DAQ_Enabled=%p", (void*)DAQ_Enabled);
+	
 	*((addr_t*) (M4M0CFGFPGA)) = (addr_t)(&CFGFPGA); // store address of the DAQ Enable flag for M0 core
 	CFGFPGA=0x00;
 
@@ -368,6 +398,7 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 
 		}
 		//	__WFI();
+		TRACE(3,"M0_main while(1) -- sleeping 1"); usleep(1000000);
 	}
 	return 0;
 }
@@ -379,7 +410,6 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 	uint16_t blocks = 0;
 	uint8_t *bufptr=(uint8_t*)evbufp; //reuse evbuf for buffer
 	int DAQwasEnabled = *DAQ_Enabled;
-	*DAQ_Enabled = 0; //Disable DAQ command
 	uint8_t crc7;
     int i;
     addr_t addr;
@@ -388,6 +418,7 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 
 //    Board_LED_Set(0,0);
 //	FEBDTP_PKT pkt1;
+	*DAQ_Enabled = 0; //Disable DAQ command
 	Init_FEBDTP_pkt(&pkt1, macaddr, dstmacaddr);
 	pkt1.CMD = FEB_OK_FW;
 	pkt1.REG = nblocks;
@@ -424,6 +455,7 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 //	Chip_SCU_SetPinMuxing(spifipinmuxing, sizeof(spifipinmuxing) / sizeof(PINMUX_GRP_T));
 	//Chip_Clock_SetDivider(CLK_IDIV_E, CLKIN_MAINPLL, 2);
 //	Chip_Clock_SetBaseClock(CLK_BASE_SPIFI, CLKIN_IDIVE, true, false);
+	TRACE(3,"setting M0M4STOP=1");
     *((uint8_t*)M0M4STOP)=1;
 	volatile uint8_t M4STOPPED;
 	M4STOPPED=*((uint8_t*)M4M0STOPED);
@@ -477,6 +509,7 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 //	pSpifiCtrlAddr1->STAT=0x2000024;
 //	statFlash=FLASH_GetStatus();
 //	statSPIFI=pSpifiCtrlAddr1->STAT;
+    TRACE(3,"ReceiveProgramFirmwareBlocks - before __enable_irq()");
     __enable_irq();
 	*((uint8_t*)M0M4STOP)=0; //Release M4 for normal operation
 	//Finished with SPIFI programming, reset event buffer
@@ -551,162 +584,6 @@ __RAMFUNC(RAM) void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblock
 	while(1){} //just in case we reach this point
 }
 
-/*
-void SendFPGAProgWord(	uint32_t data)
-{
-
-	uint32_t ib;
-	LPC_GPIO_PORT->B[5][13] = true; //	TS_CLK - latch data bus
-	LPC_GPIO_PORT->B[7][23] = false; // DSPI_CLK cycle clock
-	LPC_GPIO_PORT->B[7][23] = true; // DSPI_CLK cycle clock
-	LPC_GPIO_PORT->B[7][23] = true; // DSPI_CLK cycle clock
-	LPC_GPIO_PORT->B[7][23] = false; // DSPI_CLK cycle clock
-	LPC_GPIO_PORT->B[5][13] = false; //	TS_CLK - latch data bus
-	LPC_GPIO_PORT->B[5][13] = false; //	TS_CLK - latch data bus
-				// here data should be loaded to serialiser, now read it out
-	LPC_GPIO_PORT->B[1][11] = true; // DRDY out to enable shift register
-	LPC_GPIO_PORT->B[1][11] = true; // DRDY out to enable shift register
-	LPC_GPIO_PORT->B[7][23] = true; // DSPI_CLK cycle clock
-	LPC_GPIO_PORT->B[7][23] = true; // DSPI_CLK cycle clock
-	LPC_GPIO_PORT->B[7][23] = false; // DSPI_CLK cycle clock
-
-	LPC_GPIO_PORT->B[6][20] = (data>>0)&0x1; // MOSI
-
-
-	for(ib=0; ib<32; ib++)
-	{
-		mask=(mask >> 1);
-		LPC_GPIO_PORT->B[7][23] = true; // DSPI_CLK cycle clock
-		LPC_GPIO_PORT->B[7][23] = false; // DSPI_CLK cycle clock
-		LPC_GPIO_PORT->B[6][20] = (data>>(ib+1))&0x1; // MOSI
-	}
-	LPC_GPIO_PORT->B[6][20] = 0;
-
-
-	LPC_GPIO_PORT->B[1][11] = false; // DRDY out to disable shift register
-
-}*/
-
-/*
-__RAMFUNC(RAM) bool ReceiveFPGAProgramFirmwareBlocks(uint32_t start_addr, uint16_t nblocks)  //Receive up to 64 kB of firmware and program it to QSPI FLASH
-{
-	bool retval = 1;
-	uint16_t blocks = 0;
-	uint8_t *bufptr=(uint8_t*)evbufp; //reuse evbuf for buffer
-	int DAQwasEnabled = *DAQ_Enabled;
-	*DAQ_Enabled = 0; //Disable DAQ command
-	uint8_t crc7;
-    int i;
-    uint32_t addr;
- //   uint32_t statFlash;
- //   uint32_t statSPIFI;
-
-//    Board_LED_Set(0,0);
-//	FEBDTP_PKT pkt1;
-	Init_FEBDTP_pkt(&pkt1, macaddr, dstmacaddr);
-	pkt1.CMD = FEB_OK_FW;
-	pkt1.REG = nblocks;
-	ENET_SendFrameBlocking((uint8_t*) (&pkt1), 64); //send confirmation of readiness to receive NN blocks
-	while (blocks < nblocks) { //loop on up to 64 1kB blocks
-		workbuff = ENET_RXGet(&rxBytes);
-		if (workbuff) {
-			memcpy((uint8_t*) (&pkt1), workbuff, 1024+18);
-			ENET_RXQueue(workbuff, EMAC_ETH_MAX_FLEN);
-			if (pkt1.dst_mac[0] == macaddr[0] && pkt1.dst_mac[1] == macaddr[1]
-					&& pkt1.dst_mac[2] == macaddr[2]
-					&& pkt1.dst_mac[3] == macaddr[3]
-					&& pkt1.dst_mac[4] == macaddr[4]
-					&& pkt1.dst_mac[5] == macaddr[5])  //No multicast packages here, only unambiguously addressed!
-			{
-//			    Board_LED_Set(0,1);
-				// copy 1kB Data to buffer, reuse evbuf for buffer
-				crc7=pkt1.REG;
-				memcpy(bufptr,pkt1.Data,1024); //copy block to buffer
-				Init_FEBDTP_pkt(&pkt1, macaddr, dstmacaddr);
-				pkt1.REG = getCRC(bufptr,1024);
-				if(pkt1.REG==crc7) pkt1.CMD = FEB_OK_FW; //check CRC consistency
-				else pkt1.CMD = FEB_ERR_FW;
-				ENET_SendFrameBlocking((uint8_t*) (&pkt1), 64); //send confirmation of received block
-                bufptr+=1024;
-                blocks++;
-   //             Board_LED_Set(0,0);
-			}
-		}
-	}
-	//all blocks are in RAM buffer now (evbufp), time to program SPIFI
-	bufptr=(uint8_t*)evbufp;
-
-
-
-
-
-//	Chip_SCU_SetPinMuxing(spifipinmuxing, sizeof(spifipinmuxing) / sizeof(PINMUX_GRP_T));
-	//Chip_Clock_SetDivider(CLK_IDIV_E, CLKIN_MAINPLL, 2);
-//	Chip_Clock_SetBaseClock(CLK_BASE_SPIFI, CLKIN_IDIVE, true, false);
-    *((uint8_t*)M0M4STOP)=1;
-	volatile uint8_t M4STOPPED;
-	M4STOPPED=*((uint8_t*)M4M0STOPED);
-	while(M4STOPPED==0){M4STOPPED=*((uint8_t*)M4M0STOPED);} //wait for M4 to enter safe RAM loop and disable its INTs
-	__disable_irq();
-// FlashOperations();
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-//	FLASH_Reset();
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-//	FLASH_SetStatus(0x200); //Quad enable only
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-	FLASH_SetMemMode(0);
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-    FLASH_GetPartID();
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-	FLASH_UnLock();
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-	int first_4kB_block;
-	int last_4kB_block;
-	first_4kB_block=start_addr/4096;
-	last_4kB_block=(start_addr+nblocks*1024-1)/4096;
-	for(i=first_4kB_block; i<=last_4kB_block;i++)
-		{
-		  FLASH_Erase4kB(i);
-//			statFlash=FLASH_GetStatus();
-//			statSPIFI=pSpifiCtrlAddr1->STAT;
-		}
-	addr=start_addr;
-	int pages;
-    pages=0;
-	while(pages<nblocks*4) //256 Bytes pages, four in each 1kB block
-	{
-		FLASH_PageProg(addr,bufptr,256);
-//		statFlash=FLASH_GetStatus();
-//		statSPIFI=pSpifiCtrlAddr1->STAT;
-		addr+=256;
-		bufptr+=256;
-		pages++;
-	}
-//	FLASH_Reset();
-//	FLASH_PageRead(addr,bufptr); //read 256 bytes
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-	FLASH_SetMemMode(1);
-//	pSpifiCtrlAddr1->STAT=0x2000024;
-//	statFlash=FLASH_GetStatus();
-//	statSPIFI=pSpifiCtrlAddr1->STAT;
-    __enable_irq();
-	*((uint8_t*)M0M4STOP)=0; //Release M4 for normal operation
-	//Finished with SPIFI programming, reset event buffer
-	evbufp->numevts = 0;
-	evbufp->i_first = 0;
-	evbufp->i_last = 0xffff; //(equal to -1)
-	evbufp->overwritten = 0; // number of overwritten (lost) events
-	*DAQ_Enabled = DAQwasEnabled; //restart DAQ if it was running
-	return retval;
-}
-*/
 
 
 void      Chip_ENET_Init(LPC_ENET_T *pENET)
@@ -730,7 +607,8 @@ static FEBDTP_PKT glb_pkt_buf={.dst_mac={1,2,3,4,5,6},.src_mac={1,2,3,4,5,6}};
 void* ENET_RXGet(int32_t *bytes)
 {	TRACE(3,"ENET_RXGet(%p)",(void*)bytes); *bytes=sizeof(FEBDTP_PKT);
 	glb_pkt_buf.iptype=htons(0x0801);
-	glb_pkt_buf.CMD=FEB_RD_CDR;
+	//glb_pkt_buf.CMD=FEB_RD_CDR;
+	glb_pkt_buf.CMD=FEB_WR_FW;
 	return &glb_pkt_buf;
 }
 
