@@ -235,6 +235,7 @@ __RAMFUNC(RAM2) int M4_main(void *arg) {
 	evbuf.i_last = 0xffff; //(equal to -1)
 	*((uint8_t*)M0M4STOP)=0; //init IPC flags
 	*((uint8_t*)M4M0STOPED)=0;
+	TRACE(3,"M4 initializing \"M0 told me to stop and I'm stopped.\" *(%p=M0M4STOP)=%u  *(%p=M4M0STOPED)=%u",M0M4STOP,*((uint8_t*)M0M4STOP),M4M0STOPED,*((uint8_t*)M4M0STOPED) );
 	/* Time to Start M0APP */
 	if (M0Image_Boot(CPUID_M0APP, (uint32_t) BASE_ADDRESS_M0APP) < 0) {
 		DEBUGSTR("Unable to BOOT M0APP Core!");
@@ -242,19 +243,22 @@ __RAMFUNC(RAM2) int M4_main(void *arg) {
     volatile uint8_t STOPCMDFROMM0=0;
 	while(1) {
 		STOPCMDFROMM0=*((uint8_t*)M0M4STOP);
-		TRACE(3,"STOPCMDFROMM0=%u    waiting for STOPCMDFROMM0>0",STOPCMDFROMM0);
+		TRACE(3,"STOPCMDFROMM0=%u=*((uint8_t*)M0M4STOP=%p)    waiting for STOPCMDFROMM0>0 (i.e. \"Go\"",STOPCMDFROMM0,M0M4STOP);
         if(STOPCMDFROMM0>0)
         {
         	__disable_irq();
+			TRACE(3, "about to say I'm (M4) not stopped (i.e. before *((uint8_t*)M4M0STOPED)=1)" );
         	*((uint8_t*)M4M0STOPED)=1;
+			TRACE(3, "after *((uint8_t*)M4M0STOPED)=1); now waiting for M0 to tell us (M4) \"Go\"" );
         	while(STOPCMDFROMM0>0){
 				STOPCMDFROMM0=*((uint8_t*)M0M4STOP);
 			}
         	*((uint8_t*)M4M0STOPED)=0;
+			TRACE(3, "M0 told us to go and we responded ---oops were still STOPPED???  Logic wrong???" );
         	__enable_irq();
         }
         //__WFI();
-		TRACE(3,"M4_main while(1) -- sleeping 1"); usleep(1000000);
+		TRACE(3,"M4_main while(1) at end; I should be \"Stopped\" *((uint8_t*)M4M0STOPED)=%u -- sleeping 1",*((uint8_t*)M4M0STOPED)); usleep(1000000);
 	}
 	return 0;
 }

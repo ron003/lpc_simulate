@@ -27,6 +27,7 @@ int main( /*int	argc, char	*argv[]*/ )
 	void *EvRate = &m0m4shmem[0x100];
 	void *DAQ_Enabled = &m0m4shmem[0x200];
 
+	TRACE(3,"m0m4shmem is at %p",m0m4shmem );
 	sigemptyset(&set);
 	sigaddset(&set, SIGUSR1);
 	sigaddset(&set, SIGUSR2);

@@ -23,9 +23,9 @@
 
 static uint8_t*m0m4shmem;
 #define M0M4SHMEM m0m4shmem     //0x10088000
-#define M0M4STOP (M0M4SHMEM+12) //flags for iter-CPU communications: to stop M4 in RAM code for safe FLASH programming
-#define M4M0STOPED (M0M4SHMEM+16) //flags for iter-CPU communications: tells to M0 that M4 is in safe RAM code loop
-#define M4M0CFGFPGA (M0M4SHMEM+20) //HACK ABBA
+#define M0M4STOP (M0M4SHMEM+sizeof(addr_t)*3) //flags for iter-CPU communications: to stop M4 in RAM code for safe FLASH programming
+#define M4M0STOPED (M0M4SHMEM+sizeof(addr_t)*4) //flags for iter-CPU communications: tells to M0 that M4 is in safe RAM code loop
+#define M4M0CFGFPGA (M0M4SHMEM+sizeof(addr_t)*5) //HACK ABBA
 
 #include <cr_section_macros.h>
 #define EMAC_INPUT           (MD_PLN | MD_EZI)
@@ -455,12 +455,13 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 //	Chip_SCU_SetPinMuxing(spifipinmuxing, sizeof(spifipinmuxing) / sizeof(PINMUX_GRP_T));
 	//Chip_Clock_SetDivider(CLK_IDIV_E, CLKIN_MAINPLL, 2);
 //	Chip_Clock_SetBaseClock(CLK_BASE_SPIFI, CLKIN_IDIVE, true, false);
-	TRACE(3,"setting M0M4STOP=1  I think this means \"Go\" (i.e. negative logic)");
+	TRACE(3,"setting %p=M0M4STOP=1  I think this means M0 telling M4 to \"Go\" (i.e. negative logic)",M0M4STOP);
     *((uint8_t*)M0M4STOP)=1;
 	volatile uint8_t M4STOPPED;
 	M4STOPPED=*((uint8_t*)M4M0STOPED);
-	TRACE(3,"initial read of M4M0STOPED=%u", M4STOPPED );
+	TRACE(3,"initial read of M4M0STOPED(%p)=%u; will wait while M4M0STOPED==0    ??? ", M4M0STOPED, M4STOPPED );
 	while(M4STOPPED==0){M4STOPPED=*((uint8_t*)M4M0STOPED);} //wait for M4 to enter safe RAM loop and disable its INTs
+	TRACE(3,"now M4M0STOPED=%u -- i.e. M0 has confirmation that M4 is Going", M4STOPPED );
 	__disable_irq();
 // FlashOperations();
 //	statFlash=FLASH_GetStatus();
