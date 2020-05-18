@@ -263,7 +263,8 @@ void      Chip_Clock_DisableBaseClock(CHIP_CGU_BASE_CLK_T BaseClock)
 {TRACE(3,"Chip_Clock_DisableBaseClock(%d) called.",BaseClock);}
 
 uint32_t  Chip_SSP_WriteFrames_Blocking(LPC_SSP_T *pSSP, uint8_t *buffer, uint32_t buffer_len)
-{TRACE(3,"Chip_SSP_WriteFrames_Blocking(%p, %p. %u) called.", (void*)pSSP, (void*)buffer, buffer_len);}
+{TRACE(3,"Chip_SSP_WriteFrames_Blocking(%p, %p. %u) called.", (void*)pSSP, (void*)buffer, buffer_len);
+ return (0);}
 
 void      Chip_SetupCoreClock(CHIP_CGU_CLKIN_T clkin, uint32_t core_freq, bool setbase)
 {TRACE(3,"Chip_SetupCoreClock(clkin=%d, core_freq=%u, setbase=%d) called.",clkin, core_freq, setbase);}
@@ -284,7 +285,8 @@ void      Local_HSADC_Init()
 {TRACE(3,"Local_HSADC_Init() called.");}
 
 uint32_t  SysTick_Config(uint32_t ticks)
-{TRACE(3,"SysTick_Config(ticks=%u) called.", ticks);}
+{TRACE(3,"SysTick_Config(ticks=%u) called.", ticks);
+ return (0);}
 
 void      Board_DAC_Init(LPC_DAC_T *pDAC)
 {TRACE(3,"Board_DAC_Init(pDAC=%p) called.", (void*)pDAC);}
@@ -293,4 +295,5 @@ void      Chip_DAC_Init(LPC_DAC_T *pDAC)
 {TRACE(3,"Chip_DAC_Init(pDAC=%p) called.", (void*)pDAC);}
 
 int       M0Image_Boot(CPUID_T cpu, uint32_t base_addr)
-{TRACE(3,"M0Image_Boot(cpu=%d, base_addr=%u) called.", cpu, base_addr);}
+{TRACE(3,"M0Image_Boot(cpu=%d, base_addr=%u) called.", cpu, base_addr);
+ return (0);}

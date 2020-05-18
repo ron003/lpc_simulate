@@ -455,10 +455,11 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 //	Chip_SCU_SetPinMuxing(spifipinmuxing, sizeof(spifipinmuxing) / sizeof(PINMUX_GRP_T));
 	//Chip_Clock_SetDivider(CLK_IDIV_E, CLKIN_MAINPLL, 2);
 //	Chip_Clock_SetBaseClock(CLK_BASE_SPIFI, CLKIN_IDIVE, true, false);
-	TRACE(3,"setting M0M4STOP=1");
+	TRACE(3,"setting M0M4STOP=1  I think this means \"Go\" (i.e. negative logic)");
     *((uint8_t*)M0M4STOP)=1;
 	volatile uint8_t M4STOPPED;
 	M4STOPPED=*((uint8_t*)M4M0STOPED);
+	TRACE(3,"initial read of M4M0STOPED=%u", M4STOPPED );
 	while(M4STOPPED==0){M4STOPPED=*((uint8_t*)M4M0STOPED);} //wait for M4 to enter safe RAM loop and disable its INTs
 	__disable_irq();
 // FlashOperations();
@@ -531,6 +532,7 @@ __RAMFUNC(RAM) void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblock
 	*((uint8_t*)M0M4STOP)=1;
 	volatile uint8_t M4STOPPED;
 	M4STOPPED=*((uint8_t*)M4M0STOPED);
+	TRACE(3,"initial read of M4M0STOPED=%u", M4STOPPED );
 	while(M4STOPPED==0){M4STOPPED=*((uint8_t*)M4M0STOPED);} //wait for M4 to enter safe RAM loop and disable its INTs
 	__disable_irq();
 //	// FlashOperations();
@@ -603,12 +605,19 @@ void      Conf_SSP_as_SPI()
 
 // This returns NULL if no data or a ptr to a global data buf and the number of bytes is
 // returned via ptr to bytes
+static unsigned ENET_RXGet_command_count=0;
 static FEBDTP_PKT glb_pkt_buf={.dst_mac={1,2,3,4,5,6},.src_mac={1,2,3,4,5,6}};
 void* ENET_RXGet(int32_t *bytes)
-{	TRACE(3,"ENET_RXGet(%p)",(void*)bytes); *bytes=sizeof(FEBDTP_PKT);
+{
+	*bytes=sizeof(FEBDTP_PKT);		
 	glb_pkt_buf.iptype=htons(0x0801);
-	//glb_pkt_buf.CMD=FEB_RD_CDR;
-	glb_pkt_buf.CMD=FEB_WR_FW;
+	if (ENET_RXGet_command_count == 0)
+		glb_pkt_buf.CMD=FEB_WR_FW;
+	else
+		glb_pkt_buf.CMD=FEB_RD_CDR;
+	++ENET_RXGet_command_count;
+	TRACE(3,TSPRINTF("ENET_RXGet(%%p) returning glb_pkt_buf w/ cmd=%s",glb_pkt_buf.CMD==FEB_WR_FW?"FEB_WR_FW":"FEB_RD_CDR"),
+	      (void*)bytes);
 	return &glb_pkt_buf;
 }
 
@@ -616,7 +625,8 @@ void      ENET_RXQueue(void *buffer, int32_t bytes)
 {TRACE(3,"ENET_RXQueue(%p,%d)",buffer,bytes);}
 
 bool      FLASH_Erase4kB(int blk)
-{TRACE(3,"FLASH_Erase4kB(%d)",blk);}
+{TRACE(3,"FLASH_Erase4kB(%d)",blk);
+ return (1);}
 
 uint32_t  FLASH_GetPartID()
 {TRACE(3,"FLASH_GetPartID"); return 0;}
