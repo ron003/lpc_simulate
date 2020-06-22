@@ -27,7 +27,7 @@ int main( /*int	argc, char	*argv[]*/ )
 	void *EvRate = &m0m4shmem[0x100];
 	void *DAQ_Enabled = &m0m4shmem[0x200];
 
-	TRACE(3,"m0m4shmem is at %p",m0m4shmem );
+	TRACE(13,"m0m4shmem is at %p",m0m4shmem );
 	sigemptyset(&set);
 	sigaddset(&set, SIGUSR1);
 	sigaddset(&set, SIGUSR2);
@@ -48,14 +48,18 @@ int main( /*int	argc, char	*argv[]*/ )
 
 	// https://www.linuxprogrammingblog.com/all-about-linux-signals?page=11
 
-	for (unsigned uu=0; uu<10000; ++uu) {
-		TRACE(3,"send irq SIGUSR1");
-		pthread_kill( threads[m0_thread], SIGUSR1 );
-		usleep(100000);
-		TRACE(3,"send irq SIGUSR2");
+	for (unsigned uu=0; uu<10000000; ++uu) {
+		if ((uu%4)==1){
+			TRACE(7,"send irq SIGUSR1 -- MX_CORE_IRQ");
+			pthread_kill( threads[m0_thread], SIGUSR1 );
+			usleep(0);
+		}
+		TRACE(7,"send irq SIGUSR2 -- GPIO0_IRQ");
 		pthread_kill( threads[m4_thread], SIGUSR2 );
-		usleep(900000);
+		usleep(0);
 	}
+	TRACE(1,"Done with SIGUSR1,SIGUSR2");
+	exit(0);
 
 	pthread_join(threads[m4_thread], NULL);
 	pthread_join(threads[m0_thread], NULL);

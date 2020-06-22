@@ -11,4 +11,4 @@
 #include <TRACE/trace.h>
 
 void      Chip_DAC_UpdateValue(LPC_DAC_T *pDAC, uint32_t dac_value)
-{TRACE(3,"Chip_DAC_UpdateValue(pDAC=%p, dac_value=%u) called.", (void*)pDAC, dac_value);}
+{TRACE(13,"Chip_DAC_UpdateValue(pDAC=%p, dac_value=%u) called.", (void*)pDAC, dac_value);}

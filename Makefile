@@ -7,7 +7,7 @@
 
 # -D_DEFAULT_SOURCE declares signal stuff
 #CC       = gcc -std=c11 -pedantic -D_DEFAULT_SOURCE -fsanitize=address
-CC       = gcc -std=c11 -pedantic -D_DEFAULT_SOURCE -I${TRACE_INC}
+CC       = gcc -std=c11 -pedantic -D_DEFAULT_SOURCE # -I${TRACE_INC}
 CFLAGS   = -g -Wall -Wextra
 CPPFLAGS = -I.
 

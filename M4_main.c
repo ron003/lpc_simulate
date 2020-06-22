@@ -29,8 +29,6 @@
 #include "chip_clocks.h"
 void Chip_SetupCoreClock(CHIP_CGU_CLKIN_T clkin, uint32_t core_freq, bool setbase);
 
-#define TRACE_NAME trace_path_components(__FILE__,1)
-
 void Board_Init(void);
 void Local_CITIROC_Init(void);
 uint32_t SysTick_Config(uint32_t ticks);
@@ -101,13 +99,13 @@ __RAMFUNC(RAM2) void SysTick_Handler(void) {
 }
 
 __RAMFUNC(RAM2) void GPIO0_IRQHandler(void) {
-	TRACE(3,"GPIO0_IRQHandler called");
+	TRACE(13,"GPIO0_IRQHandler called. DAQ_Enabled=%d", DAQ_Enabled);
 	//	 Board_LED_Toggle(0);
 	Chip_PININT_ClearIntStatus(LPC_GPIO_PIN_INT, 0xff);
 	if(DAQ_Enabled==1){
-	LPC_GPIO_PORT->B[0][8] = true; //fast LED on
-	ProcessEvent();
-	EvCounter++;
+		LPC_GPIO_PORT->B[0][8] = true; //fast LED on
+		ProcessEvent();
+		EvCounter++;
 	}
 	Chip_GPIO_SetPinState(LPC_GPIO_PORT, 0x1, 13, 0); //TS_ENA //reset HOLD FlipFlop
 	LPC_GPIO_PORT->B[0][8] = false; //fast LED off
@@ -118,7 +116,7 @@ __RAMFUNC(RAM2) void GPIO0_IRQHandler(void) {
 static void __disable_irq()
 {
 	sigset_t set;
-	TRACE(3,"__disable_irq() SIG_BLOCKing SIGUSR2");
+	TRACE(13,"SIG_BLOCKing SIGUSR2 GPIO0_IRQHandler");
 	sigemptyset(&set);
 	sigaddset(&set, SIGUSR2);
 	pthread_sigmask(SIG_BLOCK, &set, NULL);
@@ -127,7 +125,7 @@ static void __enable_irq()
 {
 	sigset_t unblock_set, block_add_set;
 	struct sigaction  new_sigaction_s={0};
-	TRACE(3,"__enable_irq() SIG_UNBLOCKing SIGUSR2 - handler GPIO0_IRQHandler");
+	TRACE(13,"new_sigaction.handler=GPIO0_IRQHandler SIG_UNBLOCKing SIGUSR2");
 	sigemptyset(&unblock_set);
 	sigaddset(&unblock_set, SIGUSR2);
 	sigemptyset(&block_add_set);
@@ -233,71 +231,74 @@ __RAMFUNC(RAM2) int M4_main(void *arg) {
 	evbuf.overwritten = 0; // number of overwritten (lost) events
 	evbuf.i_first = 0;
 	evbuf.i_last = 0xffff; //(equal to -1)
-	*((uint8_t*)M0M4STOP)=0; //init IPC flags
+	*((uint8_t*)M0M4STOP)=0; //init IPC flags   POSITIVE LOGIC -- 1=true
 	*((uint8_t*)M4M0STOPED)=0;
-	TRACE(3,"M4 initializing \"M0 told me to stop and I'm stopped.\" *(%p=M0M4STOP)=%u  *(%p=M4M0STOPED)=%u",M0M4STOP,*((uint8_t*)M0M4STOP),M4M0STOPED,*((uint8_t*)M4M0STOPED) );
+	TRACE(13,"M4 initializing \"M0 has _not_ told me to stop and I'm _not_ stopped.\" *(%p=M0M4STOP)=%u  *(%p=M4M0STOPED)=%u",
+	      M0M4STOP,*((uint8_t*)M0M4STOP),M4M0STOPED,*((uint8_t*)M4M0STOPED) );
 	/* Time to Start M0APP */
 	if (M0Image_Boot(CPUID_M0APP, (uint32_t) BASE_ADDRESS_M0APP) < 0) {
 		DEBUGSTR("Unable to BOOT M0APP Core!");
 	}
-    volatile uint8_t STOPCMDFROMM0=0;
+    volatile uint8_t STOPCMDFROMM0; /* doesn't need to be initialized because it's set next */
 	while(1) {
 		STOPCMDFROMM0=*((uint8_t*)M0M4STOP);
-		TRACE(3,"STOPCMDFROMM0=%u=*((uint8_t*)M0M4STOP=%p)    waiting for STOPCMDFROMM0>0 (i.e. \"Go\"",STOPCMDFROMM0,M0M4STOP);
+		TRACE(13,"STOPCMDFROMM0=%u=*((uint8_t*)M0M4STOP=%p) if I've been told to stop, I'll disable_irq and wait to be told to \"Go.\"",
+		      STOPCMDFROMM0,M0M4STOP);
         if(STOPCMDFROMM0>0)
         {
-        	__disable_irq();
-			TRACE(3, "about to say I'm (M4) not stopped (i.e. before *((uint8_t*)M4M0STOPED)=1)" );
+			TRACE(13,"Yes, I've been told to stop   (disable gpio interrupts next)");
+        	__disable_irq();	/* GPIO0 */
+			TRACE(13, "about to say I (M4) have stopped (i.e. before *((uint8_t*)M4M0STOPED)=1)" );
         	*((uint8_t*)M4M0STOPED)=1;
-			TRACE(3, "after *((uint8_t*)M4M0STOPED)=1); now waiting for M0 to tell us (M4) \"Go\"" );
+			TRACE(13, "after *((uint8_t*)M4M0STOPED)=1); now waiting for M0 to tell us (M4) \"Go\"" );
         	while(STOPCMDFROMM0>0){
 				STOPCMDFROMM0=*((uint8_t*)M0M4STOP);
 			}
         	*((uint8_t*)M4M0STOPED)=0;
-			TRACE(3, "M0 told us to go and we responded ---oops were still STOPPED???  Logic wrong???" );
+			TRACE(13, "M0 told us to go and we responded -- enable GPIO interrupts next" );
         	__enable_irq();
         }
         //__WFI();
-		TRACE(3,"M4_main while(1) at end; I should be \"Stopped\" *((uint8_t*)M4M0STOPED)=%u -- sleeping 1",*((uint8_t*)M4M0STOPED)); usleep(1000000);
+		TRACE(13,"while(1) at end -- sleeping 1"); usleep(1000000);
 	}
 	return 0;
 }
 
 void      Chip_Clock_DisableBaseClock(CHIP_CGU_BASE_CLK_T BaseClock)
-{TRACE(3,"Chip_Clock_DisableBaseClock(%d) called.",BaseClock);}
+{TRACE(13,"(BaseClock=%d) called.",BaseClock);}
 
 uint32_t  Chip_SSP_WriteFrames_Blocking(LPC_SSP_T *pSSP, uint8_t *buffer, uint32_t buffer_len)
-{TRACE(3,"Chip_SSP_WriteFrames_Blocking(%p, %p. %u) called.", (void*)pSSP, (void*)buffer, buffer_len);
+{TRACE(13,"(pSSP=%p, buffer=%p. buffer_len=%u) called.", (void*)pSSP, (void*)buffer, buffer_len);
  return (0);}
 
 void      Chip_SetupCoreClock(CHIP_CGU_CLKIN_T clkin, uint32_t core_freq, bool setbase)
-{TRACE(3,"Chip_SetupCoreClock(clkin=%d, core_freq=%u, setbase=%d) called.",clkin, core_freq, setbase);}
+{TRACE(13,"Chip_SetupCoreClock(clkin=%d, core_freq=%u, setbase=%d) called.",clkin, core_freq, setbase);}
 
 void    Chip_Clock_SetBaseClock(CHIP_CGU_BASE_CLK_T BaseClock, CHIP_CGU_CLKIN_T Input, bool autoblocken, bool powerdn)
-{TRACE(3,"Chip_Clock_SetBaseClock(BaseClock=%d, Input=%d, autoblocken=%d powerdn=%d)",BaseClock,Input,autoblocken,powerdn);}
+{TRACE(13,"Chip_Clock_SetBaseClock(BaseClock=%d, Input=%d, autoblocken=%d powerdn=%d)",BaseClock,Input,autoblocken,powerdn);}
 
 void      Chip_Clock_EnableBaseClock(CHIP_CGU_BASE_CLK_T BaseClock)
-{TRACE(3,"Chip_Clock_EnableBaseClock(BaseClock=%d) called.", BaseClock);}
+{TRACE(13,"Chip_Clock_EnableBaseClock(BaseClock=%d) called.", BaseClock);}
 
 void      Board_Init(void)
-{TRACE(3,"Board_Init() called.");}
+{TRACE(13,"Board_Init() called.");}
 
 void      Local_FPGA_Init()
-{TRACE(3,"Local_FPGA_Init() called.");}
+{TRACE(13,"Local_FPGA_Init() called.");}
 
 void      Local_HSADC_Init()
-{TRACE(3,"Local_HSADC_Init() called.");}
+{TRACE(13,"Local_HSADC_Init() called.");}
 
 uint32_t  SysTick_Config(uint32_t ticks)
-{TRACE(3,"SysTick_Config(ticks=%u) called.", ticks);
+{TRACE(13,"SysTick_Config(ticks=%u) called.", ticks);
  return (0);}
 
 void      Board_DAC_Init(LPC_DAC_T *pDAC)
-{TRACE(3,"Board_DAC_Init(pDAC=%p) called.", (void*)pDAC);}
+{TRACE(13,"Board_DAC_Init(pDAC=%p) called.", (void*)pDAC);}
 
 void      Chip_DAC_Init(LPC_DAC_T *pDAC)
-{TRACE(3,"Chip_DAC_Init(pDAC=%p) called.", (void*)pDAC);}
+{TRACE(13,"Chip_DAC_Init(pDAC=%p) called.", (void*)pDAC);}
 
 int       M0Image_Boot(CPUID_T cpu, uint32_t base_addr)
-{TRACE(3,"M0Image_Boot(cpu=%d, base_addr=%u) called.", cpu, base_addr);
+{TRACE(13,"M0Image_Boot(cpu=%d, base_addr=%u) called.", cpu, base_addr);
  return (0);}

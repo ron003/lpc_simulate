@@ -17,8 +17,6 @@
 #include "EVENT.h"
 #include "flash.h"
 
-#define TRACE_NAME trace_path_components(__FILE__,1)
-
 #define VERSTR "FEB_rev3_IAP7.013"
 
 static uint8_t*m0m4shmem;
@@ -47,7 +45,7 @@ void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblocks);
  * Wait for message from M4 core
  */
 void MX_CORE_IRQHandler(void) {
-	TRACE(3, "MX_CORE_IRQHandler");
+	TRACE(7, "MX_CORE_IRQHandler");
 	Chip_CREG_ClearM4Event();
 	Board_LED_Toggle(0);
 
@@ -57,7 +55,7 @@ void MX_CORE_IRQHandler(void) {
 static void __disable_irq()
 {
 	sigset_t set;
-	TRACE(3,"__disable_irq() SIG_BLOCKing SIGUSR1");
+	TRACE(13,"__disable_irq() SIG_BLOCKing SIGUSR1 (MX_CORE_IRQHandler)");
 	sigemptyset(&set);
 	sigaddset(&set, SIGUSR1);
 	pthread_sigmask(SIG_BLOCK, &set, NULL);
@@ -67,7 +65,7 @@ static void __enable_irq()
 {
 	sigset_t unblock_set, block_add_set;
 	struct sigaction  new_sigaction_s={0};
-	TRACE(3,"__enable_irq() SIG_UNBLOCKing SIGUSR1 - handler MX_CORE_IRQHandler");
+	TRACE(13,"__enable_irq() new_sigaction.handler=MX_CORE_IRQHandler SIG_UNBLOCKing SIGUSR1");
 	sigemptyset(&unblock_set);
 	sigaddset(&unblock_set, SIGUSR1); 
 	sigemptyset(&block_add_set);
@@ -108,6 +106,7 @@ return;
 __RAMFUNC(RAM) void *M0_main(void *arg) {
 	addr_t start_addr=0;
 	uint16_t nblocks;
+	TRACE(13,"thread start");
 	M0M4SHMEM = (uint8_t*)arg;  // reverse engineering the shared memory layout...
 	// What is at the beginning of the memory region is a ptr to the evbuf
 	
@@ -116,7 +115,7 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 	DEBUGOUT("M0M4SHMEM=%p evbufp=%p",(void*)M0M4SHMEM, (void*)evbufp);
 	EvRate = (float*) (*((float**) (M0M4SHMEM + sizeof(addr_t)))); // event rate gauge pointer, see EVENT.h
 	DAQ_Enabled = (int*) (*((int**) (M0M4SHMEM + 2*sizeof(addr_t)))); // DAQ_Enabled flag pointer, see EVENT.h
-	TRACE(3,"M0_main DAQ_Enabled=%p", (void*)DAQ_Enabled);
+	TRACE(13,"M0_main *DAQ_Enabled(%p)=%d", (void*)DAQ_Enabled, *DAQ_Enabled);
 	
 	*((addr_t*) (M4M0CFGFPGA)) = (addr_t)(&CFGFPGA); // store address of the DAQ Enable flag for M0 core
 	CFGFPGA=0x00;
@@ -145,11 +144,11 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 //	DEBUGOUT("Starting switch.. \n");
 	WriteSwitchRegister(1, 1); //start the switch
 
-	TRACE(3,"main - before ProgramFPGAFirmware()");
+	TRACE(13,"main - before ProgramFPGAFirmware()");
 	ProgramFPGAFirmware();
 
 
-	TRACE(3,"main - before while(1)");
+	TRACE(8, "main - before while(1)");
 //	while (1) {}
 	while (1) {
 
@@ -191,7 +190,7 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 					Board_LED_Toggle(0);
 					break;
 				case FEB_GEN_INIT:
-					// DEBUGOUT("\nFEB_GEN_INIT received\n");
+					DEBUGOUT("FEB_GEN_INIT received\n");
 					// LPC_RGU->RESET_CTRL0=0x4; //MASTER RESET
 					if(pkt1.REG==00) *DAQ_Enabled=0; //Disable DAQ command
 					if(pkt1.REG==02) *DAQ_Enabled=1; //Enable DAQ command
@@ -348,6 +347,7 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 					Board_LED_Toggle(0);
 					break;
 				case FEB_RD_FW:  //request to transmit firmware buffer to host
+					DEBUGOUT("FEB_RD_FW received\n");
 					nblocks=pkt1.Data[4]; //number of 1024 kB blocks
 					nblocks=(nblocks<<8) | pkt1.Data[3]; //number of 1024 kB blocks
 					start_addr=(addr_t)0x14000000; //base address of the firmware SPIFI memory
@@ -364,6 +364,7 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 					Board_LED_Toggle(0);
 					break;
 				case FEB_WR_FW: // address is given in FLASH memory space, starting from 0x0
+					DEBUGOUT("FEB_WR_FW received\n");
 					nblocks = pkt1.Data[3]; //number of 1024 kB blocks
 					//nblocks=(nblocks<<8) | pkt1.Data[3]; //number of 1024 kB blocks
 					if (nblocks > 64)
@@ -398,11 +399,14 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 
 		}
 		//	__WFI();
-		TRACE(3,"M0_main while(1) -- sleeping 1"); usleep(1000000);
+		TRACE(8, "M0_main while(1) -- sleeping 1"); usleep(1000000);
 	}
 	return 0;
-}
+} /* M0_main */
+
+
 LPC_SPIFI_CHIPHW_T *pSpifiCtrlAddr1= (LPC_SPIFI_CHIPHW_T *)LPC_SPIFI_BASE;
+
 
 __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nblocks)  //Receive up to 64 kB of firmware and program it to QSPI FLASH
 {
@@ -423,7 +427,7 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 	pkt1.CMD = FEB_OK_FW;
 	pkt1.REG = nblocks;
 	ENET_SendFrameBlocking((uint8_t*) (&pkt1), 64); //send confirmation of readiness to receive NN blocks
-	TRACE(3,"In ReceiveProgramFirmwareBlocks before while blocks < %u", nblocks );
+	TRACE(13,"In ReceiveProgramFirmwareBlocks before while blocks < %u", nblocks );
 	while (blocks < nblocks) { //loop on up to 64 1kB blocks
 		workbuff = ENET_RXGet(&rxBytes);
 		if (workbuff) {
@@ -455,14 +459,17 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 //	Chip_SCU_SetPinMuxing(spifipinmuxing, sizeof(spifipinmuxing) / sizeof(PINMUX_GRP_T));
 	//Chip_Clock_SetDivider(CLK_IDIV_E, CLKIN_MAINPLL, 2);
 //	Chip_Clock_SetBaseClock(CLK_BASE_SPIFI, CLKIN_IDIVE, true, false);
-	TRACE(3,"setting %p=M0M4STOP=1  I think this means M0 telling M4 to \"Go\" (i.e. negative logic)",M0M4STOP);
+	TRACE(13,"setting %p=M0M4STOP=1  I,M TELLING M4 \"Stop.\" (i.e. positive logic)",M0M4STOP);
     *((uint8_t*)M0M4STOP)=1;
 	volatile uint8_t M4STOPPED;
 	M4STOPPED=*((uint8_t*)M4M0STOPED);
-	TRACE(3,"initial read of M4M0STOPED(%p)=%u; will wait while M4M0STOPED==0    ??? ", M4M0STOPED, M4STOPPED );
-	while(M4STOPPED==0){M4STOPPED=*((uint8_t*)M4M0STOPED);} //wait for M4 to enter safe RAM loop and disable its INTs
-	TRACE(3,"now M4M0STOPED=%u -- i.e. M0 has confirmation that M4 is Going", M4STOPPED );
-	__disable_irq();
+	TRACE(13,"initial read of M4M0STOPED(%p)=%u; will wait/spin while M4M0STOPED==0 -- I (M0) am waiting for M4 to acknowledge the \"Stop\" cmd.", M4M0STOPED, M4STOPPED );
+	while(M4STOPPED==0)
+		M4STOPPED=*((uint8_t*)M4M0STOPED); //wait for M4 to enter safe RAM loop and disable its INTs
+
+	TRACE(13,"now M4M0STOPED=%u -- i.e. I (M0) have confirmation from M4 that M4 is Stopped", M4STOPPED );
+	TRACE(13,"about to disable_irq (MX_CORE_IRQHandler) and do FLASH_* operations");
+	__disable_irq();		 /* MX_CORE_IRQHandler */
 // FlashOperations();
 //	statFlash=FLASH_GetStatus();
 //	statSPIFI=pSpifiCtrlAddr1->STAT;
@@ -511,7 +518,7 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 //	pSpifiCtrlAddr1->STAT=0x2000024;
 //	statFlash=FLASH_GetStatus();
 //	statSPIFI=pSpifiCtrlAddr1->STAT;
-    TRACE(3,"ReceiveProgramFirmwareBlocks - before __enable_irq()");
+    TRACE(13,"ReceiveProgramFirmwareBlocks - before __enable_irq()");
     __enable_irq();
 	*((uint8_t*)M0M4STOP)=0; //Release M4 for normal operation
 	//Finished with SPIFI programming, reset event buffer
@@ -533,7 +540,7 @@ __RAMFUNC(RAM) void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblock
 	*((uint8_t*)M0M4STOP)=1;
 	volatile uint8_t M4STOPPED;
 	M4STOPPED=*((uint8_t*)M4M0STOPED);
-	TRACE(3,"initial read of M4M0STOPED=%u", M4STOPPED );
+	TRACE(13,"initial read of M4M0STOPED=%u", M4STOPPED );
 	while(M4STOPPED==0){M4STOPPED=*((uint8_t*)M4M0STOPED);} //wait for M4 to enter safe RAM loop and disable its INTs
 	__disable_irq();
 //	// FlashOperations();
@@ -590,19 +597,19 @@ __RAMFUNC(RAM) void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblock
 
 
 void      Chip_ENET_Init(LPC_ENET_T *pENET)
-{TRACE(3,"Chip_ENET_Init(%p)",(void*)pENET);}
+{TRACE(13,"Chip_ENET_Init(%p)",(void*)pENET);}
 
 void      Chip_SSP_Init(LPC_SSP_T  *pSSP)
-{TRACE(3,"Chip_SSP_Init(%p)",(void*)pSSP);}
+{TRACE(13,"Chip_SSP_Init(%p)",(void*)pSSP);}
 
 void      CITIROC_WritePMR()
-{TRACE(3,"CITIROC_WritePMR()");}
+{TRACE(13,"CITIROC_WritePMR()");}
 
 void      CITIROC_WriteSCR()
-{TRACE(3,"CITIROC_WriteSCR()");}
+{TRACE(13,"CITIROC_WriteSCR()");}
 
 void      Conf_SSP_as_SPI()
-{TRACE(3,"Conf_SSP_as_SPI()");}
+{TRACE(13,"Conf_SSP_as_SPI()");}
 
 // This returns NULL if no data or a ptr to a global data buf and the number of bytes is
 // returned via ptr to bytes
@@ -612,46 +619,49 @@ void* ENET_RXGet(int32_t *bytes)
 {
 	*bytes=sizeof(FEBDTP_PKT);		
 	glb_pkt_buf.iptype=htons(0x0801);
-	if (ENET_RXGet_command_count == 0)
+	if     (ENET_RXGet_command_count == 0){
 		glb_pkt_buf.CMD=FEB_WR_FW;
-	else
+	}else if(ENET_RXGet_command_count == 1){
+		glb_pkt_buf.CMD=FEB_GEN_INIT;
+		glb_pkt_buf.REG=2;		/* Enable DAQ command */
+	}else
 		glb_pkt_buf.CMD=FEB_RD_CDR;
 	++ENET_RXGet_command_count;
-	TRACE(3,TSPRINTF("ENET_RXGet(%%p) returning glb_pkt_buf w/ cmd=%s",glb_pkt_buf.CMD==FEB_WR_FW?"FEB_WR_FW":"FEB_RD_CDR"),
+	TRACE(13,TSPRINTF("ENET_RXGet(%%p) returning glb_pkt_buf w/ cmd=%s",glb_pkt_buf.CMD==FEB_WR_FW?"FEB_WR_FW":"FEB_RD_CDR"),
 	      (void*)bytes);
 	return &glb_pkt_buf;
 }
 
 void      ENET_RXQueue(void *buffer, int32_t bytes)
-{TRACE(3,"ENET_RXQueue(%p,%d)",buffer,bytes);}
+{TRACE(13,"ENET_RXQueue(%p,%d)",buffer,bytes);}
 
 bool      FLASH_Erase4kB(int blk)
-{TRACE(3,"FLASH_Erase4kB(%d)",blk);
+{TRACE(13,"FLASH_Erase4kB(%d)",blk);
  return (1);}
 
 uint32_t  FLASH_GetPartID()
-{TRACE(3,"FLASH_GetPartID"); return 0;}
+{TRACE(13,"FLASH_GetPartID"); return 0;}
 
 bool      FLASH_PageProg(addr_t addr, uint8_t *buf, uint32_t bytes)
-{TRACE(3,"FLASH_PageProg(%p,%p,%u)",(void*)addr,(void*)buf,bytes); return true;}
+{TRACE(13,"FLASH_PageProg(%p,%p,%u)",(void*)addr,(void*)buf,bytes); return true;}
 
 bool      FLASH_PageRead(addr_t addr, uint8_t *buf)
-{TRACE(3,"FLASH_PageRead(%p,%p)",(void*)addr,(void*)buf); return true;}
+{TRACE(13,"FLASH_PageRead(%p,%p)",(void*)addr,(void*)buf); return true;}
 
 void      FLASH_SetMemMode(bool enMMode)
-{TRACE(3,"FLASH_SetMemMode(%d)",enMMode);}
+{TRACE(13,"FLASH_SetMemMode(%d)",enMMode);}
 
 bool      FLASH_UnLock()
-{TRACE(3,"FLASH_UnLock()"); return true;}
+{TRACE(13,"FLASH_UnLock()"); return true;}
 
 void      Local_ENET_Init()
-{uint8_t x[]={1,2,3,4,5,6};TRACE(3,"Local_ENET_Init -- seting macaddr to 01-02-03-04-05-06"); memcpy(macaddr,x,6);}
+{uint8_t x[]={1,2,3,4,5,6};TRACE(13,"Local_ENET_Init -- seting macaddr to 01-02-03-04-05-06"); memcpy(macaddr,x,6);}
 
 void      ProgramFPGAFirmware()
-{TRACE(3,"ProgramFPGAFirmware");}
+{TRACE(13,"ProgramFPGAFirmware");}
 
 uint8_t   ReadSwitchRegister(uint8_t reg)
-{TRACE(3,"ReadSwitchRegister(%u)",reg); return 0;}
+{TRACE(13,"ReadSwitchRegister(%u)",reg); return 0;}
 
 void      WriteSwitchRegister(uint8_t reg, uint8_t data)
-{TRACE(3,"WriteSwitchRegister(%u,%u)",reg,data);}
+{TRACE(13,"WriteSwitchRegister(%u,%u)",reg,data);}

@@ -2,8 +2,8 @@
 #define BOARD_H
 
 #include <TRACE/trace.h>
-#define DEBUGOUT(...) TRACE(3,__VA_ARGS__)
-#define DEBUGSTR(ss)  TRACE(3,ss)
+#define DEBUGOUT(...) TRACE(4, __VA_ARGS__)
+#define DEBUGSTR(ss)  TRACE(4, ss)
 #include <signal.h>				// sigset_t
 #include <stdint.h>
 typedef unsigned long int ulong;
@@ -18,16 +18,16 @@ typedef _Bool bool;
 
 enum { false, true };
 
-#define Board_LED_Toggle(x) TRACE(3,"Board_LED_Toggle(%d)", x)
+#define Board_LED_Toggle(x) TRACE(13,"Board_LED_Toggle(%d)", x)
 __attribute__((__unused__))
-static void ENET_SendFrameBlocking(uint8_t*buf,uint16_t size){TRACE(3,"ENET_SendFrameBlocking(%p,%u)",buf,size);}
+static void ENET_SendFrameBlocking(uint8_t*buf,uint16_t size){TRACE(13,"ENET_SendFrameBlocking(%p,%u)",buf,size);}
 __attribute__((__unused__))
 static void ENET_SendFrameNonBlocking(uint8_t*buf,uint16_t size){
-	TRACE(3,"ENET_SendFrameNonBlocking(%p,%u)",buf,size);}
-#define SystemCoreClockUpdate()   TRACE(3,"SystemCoreClockUpdate()")
-#define NVIC_EnableIRQ(x)         TRACE(3,"NVIC_EnableIRQ(%u)",x)
-#define Board_SSP_Init(x)         TRACE(3,"Board_SSP_Init(%p)",(void*)x)
-#define Board_ENET_Init()         TRACE(3,"Board_ENET_Init()")
+	TRACE(13,"ENET_SendFrameNonBlocking(%p,%u)",buf,size);}
+#define SystemCoreClockUpdate()   TRACE(13,"SystemCoreClockUpdate()")
+#define NVIC_EnableIRQ(x)         TRACE(13,"NVIC_EnableIRQ(%u)",x)
+#define Board_SSP_Init(x)         TRACE(13,"Board_SSP_Init(%p)",(void*)x)
+#define Board_ENET_Init()         TRACE(13,"Board_ENET_Init()")
 
 typedef unsigned char * addr_t;
 typedef void (*handler_t)(int);

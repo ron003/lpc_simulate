@@ -24,23 +24,23 @@ volatile uint32_t *CFGFPGA = 0;
 
 __RAMFUNC(RAM2) uint32_t GrayToBin(uint32_t n)
 {
-uint32_t res=0;
-int a[32],b[32],i=0;
-for(i=0; i<32; i++){
-if((n & 0x80000000)>0) a[i]=1;
-else a[i]=0;
-n=n<<1;
-}
-b[0]=a[0];
-for(i=1; i<32; i++){
-if(a[i]>0) if(b[i-1]==0) b[i]=1; else b[i]=0;
-else b[i]=b[i-1];
-}
-for(i=0; i<32; i++){
-res=(res<<1);
-res=(res | b[i]);
-}
-  return res;
+	uint32_t res=0;
+	int a[32],b[32],i=0;
+	for(i=0; i<32; i++){
+		if((n & 0x80000000)>0) a[i]=1;
+		else a[i]=0;
+		n=n<<1;
+	}
+	b[0]=a[0];
+	for(i=1; i<32; i++){
+		if(a[i]>0) if(b[i-1]==0) b[i]=1; else b[i]=0;
+		else b[i]=b[i-1];
+	}
+	for(i=0; i<32; i++){
+		res=(res<<1);
+		res=(res | b[i]);
+	}
+	return res;
 }
 
 __RAMFUNC(RAM2)  void CorrectOscillator(uint32_t ts0)
@@ -64,6 +64,8 @@ __RAMFUNC(RAM2)  void CorrectOscillator(uint32_t ts0)
 	ts0AVE=0;ts0IND=0;
 }
 
+static uint32_t static_count=0;
+
 __RAMFUNC(RAM2) void ProcessEvent() {
 	uint8_t ch = 32;
 	int ib;
@@ -85,6 +87,7 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 		if (evbuf.i_first == EVBUFSIZE)
 			evbuf.i_first = 0; //increment pointer in loop
 	}
+	TRACE(8,"evbuf.numevts=%u .overwritten=%u EVBUFSIZE(evts)=%d", evbuf.numevts, evbuf.overwritten, EVBUFSIZE);
 
 	//access to shared memory to check value of config_outch
 	//config_outch = *((uint32_t*) (M0M4SHMEM + 20));
@@ -106,6 +109,7 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 			LPC_GPIO_PORT->B[7][23] = true; // DSPI_CLK cycle clock
 			LPC_GPIO_PORT->B[7][23] = false; // DSPI_CLK cycle clock
 
+# if 0
 			CFGFPGA = (uint32_t*) (*((uint32_t**) (M4M0CFGFPGA)));
 
 			config_outch=*CFGFPGA;
@@ -122,6 +126,10 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 				LPC_GPIO_PORT->B[6][20] = (config_outch>>(ib+1))&0x1; // MOSI
 			}
 			LPC_GPIO_PORT->B[6][20] = 0;
+# else
+			LPC_GPIO_PORT->B[6][20] = config_outch;
+			ts0 = static_count++;
+# endif
 			mask=0x80000000;
 			for(ib=0; ib<32; ib++)
 			{
@@ -170,6 +178,7 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 //lp1:
 	for (ch = 0; ch < 32; ch++) {
 		LPC_ADCHS->TRIGGER = 1;
+# if 0
 		val = *(uint32_t*) 0x400F0028; //last sample ch0;
 		while (!(val & 0x1)) { //poll DONE bit on the second channel
 			val = *(uint32_t*) 0x400F0028; //last sample ch0;
@@ -177,6 +186,9 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 		}
 		LPC_GPIO_PORT->B[5][5] = false;	 	  ///GPIO5[5],CLOCK_READ
 		val = (val >> 6) & 0x0fff; //last sample ch0;
+# else
+		val = ilast*32+ch;
+# endif
 		evbuf.buf[ilast].adc[ch] = val;
 		LPC_GPIO_PORT->B[5][5] = true; ///GPIO5[5],CLOCK_READ
 	}

@@ -24,23 +24,47 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 	FEBDTP_PKT pkt1;
 	evstotransmit=evbuf->numevts;
 
-	TRACE(3,"evbuf=%p evbuf->numevts=%u", (void*)evbuf, evbuf? evbuf->numevts: 0);
+	TRACE(13,"evbuf=%p evbuf->numevts=%u", (void*)evbuf, evbuf? evbuf->numevts: 0);
 	while(evstransmitted<evstotransmit) // Transmit maximum full buffer, no risk of read-write race
 	{
-		DEBUGOUT("Sending FEB_OK_CDR with data payload.. \n");
+		DEBUGOUT("Sending FEB_OK_CDR with data payload.. evbuf->i_first=%u\n", evbuf->i_first);
 		Init_FEBDTP_pkt(&pkt1, macaddr,dstmacaddr);
 		evsinpack=0;
 		paklen=MAXPACKLEN-MAXPAYLOAD;
 		dptr=0;
 		evbuf->overwritten=0; //reset lost counter
 		//fill packet with events
+		if ((evbuf->i_first % 1000) == 0)
+			TRACE(2, "evbuf->i_first=%u", evbuf->i_first);
 		while(evsinpack < maxevsinpack && evstransmitted<evstotransmit)
 		{
+			uint16_t *adcp, uu;
+			Event_t  *evp;
 			memcpy(&(pkt1.Data[dptr]), &(evbuf->buf[evbuf->i_first].flags), EVSIZE);
+			evp=&evbuf->buf[evbuf->i_first];
+			TRACE(6,"flags=0x%08x T0=0x%08x T1=0x%08x coinc=0x%08x", evp->flags, evp->T0, evp->T1, evp->coinc);
+			adcp=evbuf->buf[evbuf->i_first].adc;
+#           define ADC(x) (uint64_t)(adcp[x])
+			TRACE(7, "x%016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx",
+			      (ADC(31)<<48)|(ADC(30)<<32)|(ADC(29)<<16)|(ADC(28)<<0),
+			      (ADC(27)<<48)|(ADC(26)<<32)|(ADC(25)<<16)|(ADC(24)<<0),
+			      (ADC(23)<<48)|(ADC(22)<<32)|(ADC(21)<<16)|(ADC(20)<<0),
+			      (ADC(19)<<48)|(ADC(18)<<32)|(ADC(17)<<16)|(ADC(16)<<0),
+			      (ADC(15)<<48)|(ADC(14)<<32)|(ADC(13)<<16)|(ADC(12)<<0),
+			      (ADC(11)<<48)|(ADC(10)<<32)|(ADC( 9)<<16)|(ADC( 8)<<0),
+			      (ADC( 7)<<48)|(ADC( 6)<<32)|(ADC( 5)<<16)|(ADC( 4)<<0),
+			      (ADC( 3)<<48)|(ADC( 2)<<32)|(ADC( 1)<<16)|(ADC( 0)<<0));
+			for (uu=0; uu<31; ++uu)
+				if (adcp[uu] != (evbuf->i_first*32+uu)) {
+					TRACE(0, "unexpected adc value adcp[%u]=0x%04x != (%u*32+%u)",
+					      uu, adcp[uu], evbuf->i_first, uu);
+					exit(1);
+				}
 			evbuf->i_first++; if(evbuf->i_first==EVBUFSIZE) evbuf->i_first=0; //increment pointer in loop
 			evsinpack++;
 			paklen += EVSIZE;
 			dptr += EVSIZE;
+			TRACE(9, "evbuf->numevts=%u evbuf->i_first=%u", evbuf->numevts, evbuf->i_first);
 			evbuf->numevts--;
 			evstransmitted++;
 		}
