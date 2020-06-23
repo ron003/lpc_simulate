@@ -27,7 +27,7 @@ typedef struct {
 	uint32_t overwritten; // number of overwritten (lost) events
 	uint16_t i_first;
 	uint16_t i_last;
-	uint16_t numevts;
+	_Atomic uint16_t numevts;
 	Event_t buf[EVBUFSIZE];
 } Evbuf_t;
 

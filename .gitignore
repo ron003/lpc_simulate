@@ -1,3 +1,6 @@
 *.~*~
 *.o
 main_thread
+*.trc
+*.vim
+*.vba

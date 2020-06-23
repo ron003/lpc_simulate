@@ -87,7 +87,8 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 		if (evbuf.i_first == EVBUFSIZE)
 			evbuf.i_first = 0; //increment pointer in loop
 	}
-	TRACE(8,"evbuf.numevts=%u .overwritten=%u EVBUFSIZE(evts)=%d", evbuf.numevts, evbuf.overwritten, EVBUFSIZE);
+	TRACE(8,"evbuf.i_last=%u .numevts=%u .overwritten=%u EVBUFSIZE(evts)=%d",
+	      evbuf.i_last, evbuf.numevts, evbuf.overwritten, EVBUFSIZE);
 
 	//access to shared memory to check value of config_outch
 	//config_outch = *((uint32_t*) (M0M4SHMEM + 20));

@@ -42,7 +42,8 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 			Event_t  *evp;
 			memcpy(&(pkt1.Data[dptr]), &(evbuf->buf[evbuf->i_first].flags), EVSIZE);
 			evp=&evbuf->buf[evbuf->i_first];
-			TRACE(6,"flags=0x%08x T0=0x%08x T1=0x%08x coinc=0x%08x", evp->flags, evp->T0, evp->T1, evp->coinc);
+			TRACE(6,"evbuf->buf[evbuf->i_first=%u] ==> flags=0x%08x T0=0x%08x T1=0x%08x coinc=0x%08x",
+			      evbuf->i_first, evp->flags, evp->T0, evp->T1, evp->coinc);
 			adcp=evbuf->buf[evbuf->i_first].adc;
 #           define ADC(x) (uint64_t)(adcp[x])
 			TRACE(7, "x%016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx",
@@ -64,7 +65,7 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 			evsinpack++;
 			paklen += EVSIZE;
 			dptr += EVSIZE;
-			TRACE(9, "evbuf->numevts=%u evbuf->i_first=%u", evbuf->numevts, evbuf->i_first);
+			TRACE(9, "evbuf->numevts=%u ->i_first=%u", evbuf->numevts, evbuf->i_first);
 			evbuf->numevts--;
 			evstransmitted++;
 		}
@@ -75,7 +76,7 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 	}
 	evbuf->overwritten=0; //reset lost counter
 	return retval;
-}
+} /* TransmitEventBuffer */
 
 __RAMFUNC(RAM) uint8_t getCRC(uint8_t message[], uint32_t length)
 {

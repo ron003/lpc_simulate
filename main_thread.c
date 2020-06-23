@@ -48,13 +48,13 @@ int main( /*int	argc, char	*argv[]*/ )
 
 	// https://www.linuxprogrammingblog.com/all-about-linux-signals?page=11
 
-	for (unsigned uu=0; uu<10000000; ++uu) {
+	for (unsigned uu=0; uu<50000; ++uu) {
 		if ((uu%4)==1){
-			TRACE(7,"send irq SIGUSR1 -- MX_CORE_IRQ");
+			TRACE(7,"send irq SIGUSR1 -- MX_CORE_IRQ - interrupt sleep to cause TrasmitEventBuffer");
 			pthread_kill( threads[m0_thread], SIGUSR1 );
 			usleep(0);
 		}
-		TRACE(7,"send irq SIGUSR2 -- GPIO0_IRQ");
+		TRACE(7,"send irq SIGUSR2 -- GPIO0_IRQ - upstream event creation");
 		pthread_kill( threads[m4_thread], SIGUSR2 );
 		usleep(0);
 	}

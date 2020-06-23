@@ -45,7 +45,7 @@ void CopyFlashBlocksAndRestart(addr_t start_addr, uint16_t nblocks);
  * Wait for message from M4 core
  */
 void MX_CORE_IRQHandler(void) {
-	TRACE(7, "MX_CORE_IRQHandler");
+	TRACE(7, "MX_CORE_IRQHandler -- currently seems to not do anything EXCEPT interrupt usleep!");
 	Chip_CREG_ClearM4Event();
 	Board_LED_Toggle(0);
 
@@ -106,6 +106,7 @@ return;
 __RAMFUNC(RAM) void *M0_main(void *arg) {
 	addr_t start_addr=0;
 	uint16_t nblocks;
+	int sts=0;
 	TRACE(13,"thread start");
 	M0M4SHMEM = (uint8_t*)arg;  // reverse engineering the shared memory layout...
 	// What is at the beginning of the memory region is a ptr to the evbuf
@@ -151,14 +152,13 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 	TRACE(8, "main - before while(1)");
 //	while (1) {}
 	while (1) {
-
 		/* Check for receive packets */
 		workbuff = ENET_RXGet(&rxBytes);
 		if (workbuff) {
 
 			//Action on the received packet
 			memcpy((uint8_t*) (&pkt1), workbuff, rxBytes);
-			DEBUGOUT("CMD: %04x", pkt1.CMD);
+			DEBUGOUT("sts=%d errno=%d CMD: %04x", sts, errno, pkt1.CMD);
 			/* Re-queue the (same) packet again */
 			ENET_RXQueue(workbuff, EMAC_ETH_MAX_FLEN);
 
@@ -399,8 +399,8 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 
 		}
 		//	__WFI();
-		TRACE(8, "M0_main while(1) -- sleeping 1"); usleep(1000000);
-	}
+		TRACE(8, "M0_main while(1) -- sleeping 1"); sts=usleep(1000000);
+	} /* while(1) */
 	return 0;
 } /* M0_main */
 
