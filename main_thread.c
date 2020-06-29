@@ -48,9 +48,12 @@ int main( /*int	argc, char	*argv[]*/ )
 
 	// https://www.linuxprogrammingblog.com/all-about-linux-signals?page=11
 
-	for (unsigned uu=0; uu<50000; ++uu) {
-		if ((uu%4)==1){
-			TRACE(7,"send irq SIGUSR1 -- MX_CORE_IRQ - interrupt sleep to cause TrasmitEventBuffer");
+	unsigned mod=4;
+	for (unsigned uu=0; uu<100000; ++uu) {
+		if ((uu%mod)==(mod-1)){
+			if (uu==18175) mod=4096;
+			else           mod=4;
+			TRACE(7,"uu=%u send irq SIGUSR1 -- MX_CORE_IRQ - interrupt sleep to cause TrasmitEventBuffer",uu);
 			pthread_kill( threads[m0_thread], SIGUSR1 );
 			usleep(0);
 		}

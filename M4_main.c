@@ -229,8 +229,8 @@ __RAMFUNC(RAM2) int M4_main(void *arg) {
 
 	evbuf.numevts = 0;
 	evbuf.overwritten = 0; // number of overwritten (lost) events
-	evbuf.i_first = 0;
-	evbuf.i_last = 0xffff; //(equal to -1)
+	evbuf.i_written = 0;
+	evbuf.i_read = 0xffff; //(equal to -1)
 	*((uint8_t*)M0M4STOP)=0; //init IPC flags   POSITIVE LOGIC -- 1=true
 	*((uint8_t*)M4M0STOPED)=0;
 	TRACE(13,"M4 initializing \"M0 has _not_ told me to stop and I'm _not_ stopped.\" *(%p=M0M4STOP)=%u  *(%p=M4M0STOPED)=%u",

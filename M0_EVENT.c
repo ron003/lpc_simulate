@@ -22,29 +22,30 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 	uint16_t evstransmitted=0;
 	uint16_t evstotransmit=0;
 	FEBDTP_PKT pkt1;
-	evstotransmit=evbuf->numevts;
+	evstotransmit=evbuf->i_written - evbuf->i_read;
 
-	TRACE(13,"evbuf=%p evbuf->numevts=%u", (void*)evbuf, evbuf? evbuf->numevts: 0);
+	TRACE(13,"evbuf=%p tot_put=%u evstotransmit=%u", (void*)evbuf, evbuf->numevts, evstotransmit);
 	while(evstransmitted<evstotransmit) // Transmit maximum full buffer, no risk of read-write race
 	{
-		DEBUGOUT("Sending FEB_OK_CDR with data payload.. evbuf->i_first=%u\n", evbuf->i_first);
+		DEBUGOUT("Sending FEB_OK_CDR with data payload.. evbuf->i_written=%u\n", evbuf->i_written);
 		Init_FEBDTP_pkt(&pkt1, macaddr,dstmacaddr);
 		evsinpack=0;
 		paklen=MAXPACKLEN-MAXPAYLOAD;
 		dptr=0;
 		evbuf->overwritten=0; //reset lost counter
 		//fill packet with events
-		if ((evbuf->i_first % 1000) == 0)
-			TRACE(2, "evbuf->i_first=%u", evbuf->i_first);
+		if ((evbuf->i_read % 1000) == 0)
+			TRACE(2, "evbuf->i_read=%u", evbuf->i_read);
 		while(evsinpack < maxevsinpack && evstransmitted<evstotransmit)
 		{
 			uint16_t *adcp, uu;
 			Event_t  *evp;
-			memcpy(&(pkt1.Data[dptr]), &(evbuf->buf[evbuf->i_first].flags), EVSIZE);
-			evp=&evbuf->buf[evbuf->i_first];
-			TRACE(6,"evbuf->buf[evbuf->i_first=%u] ==> flags=0x%08x T0=0x%08x T1=0x%08x coinc=0x%08x",
-			      evbuf->i_first, evp->flags, evp->T0, evp->T1, evp->coinc);
-			adcp=evbuf->buf[evbuf->i_first].adc;
+			uint16_t buf_read_idx = evbuf->i_read & (EVBUFSIZE-1);
+			memcpy(&(pkt1.Data[dptr]), &(evbuf->buf[buf_read_idx].flags), EVSIZE);
+			evp=&evbuf->buf[buf_read_idx];
+			TRACE(6,"evbuf->buf[buf_read_idx=%u] ==> flags=0x%08x T0=0x%08x T1=0x%08x coinc=0x%08x",
+			      buf_read_idx, evp->flags, evp->T0, evp->T1, evp->coinc);
+			adcp=evbuf->buf[buf_read_idx].adc;
 #           define ADC(x) (uint64_t)(adcp[x])
 			TRACE(7, "x%016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx",
 			      (ADC(31)<<48)|(ADC(30)<<32)|(ADC(29)<<16)|(ADC(28)<<0),
@@ -56,17 +57,16 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 			      (ADC( 7)<<48)|(ADC( 6)<<32)|(ADC( 5)<<16)|(ADC( 4)<<0),
 			      (ADC( 3)<<48)|(ADC( 2)<<32)|(ADC( 1)<<16)|(ADC( 0)<<0));
 			for (uu=0; uu<31; ++uu)
-				if (adcp[uu] != (evbuf->i_first*32+uu)) {
-					TRACE(0, "unexpected adc value adcp[%u]=0x%04x != (%u*32+%u)",
-					      uu, adcp[uu], evbuf->i_first, uu);
+				if (adcp[uu] != (buf_read_idx*32+uu)) {
+					TRACE(0, "i_read=%u unexpected adc value adcp[%u]=0x%04x != (%u*32+%u)",
+					      evbuf->i_read, uu, adcp[uu], buf_read_idx, uu);
 					exit(1);
 				}
-			evbuf->i_first++; if(evbuf->i_first==EVBUFSIZE) evbuf->i_first=0; //increment pointer in loop
+			evbuf->i_read++; //increment pointer in loop -- ROLLOVER ACCOUNTED FOR
 			evsinpack++;
 			paklen += EVSIZE;
 			dptr += EVSIZE;
-			TRACE(9, "evbuf->numevts=%u ->i_first=%u", evbuf->numevts, evbuf->i_first);
-			evbuf->numevts--;
+			TRACE(9, "evbuf->numevts=%u ->i_read=%u (after inc)", evbuf->numevts, evbuf->i_read);
 			evstransmitted++;
 		}
 		pkt1.CMD=FEB_DATA_CDR;
@@ -74,7 +74,7 @@ bool TransmitEventBuffer(Evbuf_t *evbuf)
 		ENET_SendFrameNonBlocking((uint8_t*)(&pkt1), paklen);
 		Board_LED_Toggle(0);
 	}
-	evbuf->overwritten=0; //reset lost counter
+	//evbuf->overwritten=0; //reset lost counter   ??????
 	return retval;
 } /* TransmitEventBuffer */
 

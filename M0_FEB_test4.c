@@ -196,8 +196,8 @@ __RAMFUNC(RAM) void *M0_main(void *arg) {
 					if(pkt1.REG==02) *DAQ_Enabled=1; //Enable DAQ command
 					if(pkt1.REG==01) { //Reset buffer command
 						evbufp->numevts=0;
-						evbufp->i_first=0;
-						evbufp->i_last=0xffff; //(equal to -1)
+						evbufp->i_written=0;
+						evbufp->i_read=0; /* idx of read, count of "red" */
 						evbufp->overwritten = 0; // number of overwritten (lost) events
 					}
 					if(pkt1.REG==0xFF) ResetCPU(); //identic to pressing reset button on the FEB
@@ -523,8 +523,8 @@ __RAMFUNC(RAM) bool ReceiveProgramFirmwareBlocks(addr_t start_addr, uint16_t nbl
 	*((uint8_t*)M0M4STOP)=0; //Release M4 for normal operation
 	//Finished with SPIFI programming, reset event buffer
 	evbufp->numevts = 0;
-	evbufp->i_first = 0;
-	evbufp->i_last = 0xffff; //(equal to -1)
+	evbufp->i_written = 0;
+	evbufp->i_read = 0; // idx of read, count of "red"
 	evbufp->overwritten = 0; // number of overwritten (lost) events
 	*DAQ_Enabled = DAQwasEnabled; //restart DAQ if it was running
 	return retval;

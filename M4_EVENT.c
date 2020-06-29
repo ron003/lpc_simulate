@@ -66,29 +66,28 @@ __RAMFUNC(RAM2)  void CorrectOscillator(uint32_t ts0)
 
 static uint32_t static_count=0;
 
-__RAMFUNC(RAM2) void ProcessEvent() {
+__RAMFUNC(RAM2) void ProcessEvent() { /* read event into buffer */
 	uint8_t ch = 32;
 	int ib;
 	volatile uint32_t val = 0;
 	uint32_t ts0,ts1,mask, coinc_bits;
 	uint32_t config_outch = 0;
 	uint32_t missed;
-	uint16_t ilast = evbuf.i_last;
+	uint16_t evts_in_buf = evbuf.i_written - evbuf.i_read;
+	Event_t  dump;
+	Event_t  *evtp;
 // Increment all what needed
-	ilast++;
-	if (ilast == EVBUFSIZE)
-		ilast = 0; //increment pointer in loop
-
-	if (evbuf.numevts < EVBUFSIZE)
-		evbuf.numevts++;
-	else {
+	TRACE(8,"evbuf.i_written=%u .i_read=%u .overwritten=%u EVBUFSIZE(evts)=%d evts_in_buf=%u",
+	      evbuf.i_written, evbuf.i_read, evbuf.overwritten, EVBUFSIZE, evts_in_buf);
+	if (evts_in_buf == EVBUFSIZE){
 		evbuf.overwritten++; // buffer is full, so we're overwriting
-		evbuf.i_first++;
-		if (evbuf.i_first == EVBUFSIZE)
-			evbuf.i_first = 0; //increment pointer in loop
+		TRACE(12,"incrementing now overwritten=%u",evbuf.overwritten);
+		evtp=&dump;
+	}else{
+		evbuf.numevts++;
+		evtp=&evbuf.buf[evbuf.i_written&(EVBUFSIZE-1)]; /* increment at end when it's "written" */
 	}
-	TRACE(8,"evbuf.i_last=%u .numevts=%u .overwritten=%u EVBUFSIZE(evts)=%d",
-	      evbuf.i_last, evbuf.numevts, evbuf.overwritten, EVBUFSIZE);
+			
 
 	//access to shared memory to check value of config_outch
 	//config_outch = *((uint32_t*) (M0M4SHMEM + 20));
@@ -188,20 +187,21 @@ __RAMFUNC(RAM2) void ProcessEvent() {
 		LPC_GPIO_PORT->B[5][5] = false;	 	  ///GPIO5[5],CLOCK_READ
 		val = (val >> 6) & 0x0fff; //last sample ch0;
 # else
-		val = ilast*32+ch;
+		val = (evbuf.i_written&(EVBUFSIZE-1))*32+ch;
 # endif
-		evbuf.buf[ilast].adc[ch] = val;
+		evtp->adc[ch] = val;
 		LPC_GPIO_PORT->B[5][5] = true; ///GPIO5[5],CLOCK_READ
 	}
-	evbuf.buf[ilast].T0 = ts0;
-	evbuf.buf[ilast].T1 = ts1;
-	evbuf.buf[ilast].coinc = coinc_bits;	//ABBA:
-	evbuf.buf[ilast].flags = (evbuf.overwritten & 0x0000ffff) | (missed & 0x00ff0000);
+	evtp->T0 = ts0;
+	evtp->T1 = ts1;
+	evtp->coinc = coinc_bits;	//ABBA:
+	evtp->flags = (evbuf.overwritten & 0x0000ffff) | (missed & 0x00ff0000);
     if((ts0 & 0x80000000) && !(ts0 & 0x40000000)) CorrectOscillator(ts0 & 0x3FFFFFFF);
 	//end of loop 32
 	LPC_GPIO_PORT->B[5][5] = false;  ///GPIO5[5],CLOCK_READ
 	LPC_GPIO_PORT->B[0][7] = false; //GPIO0[7],RESETB_READ
 	LPC_GPIO_PORT->B[0][7] = true; //GPIO0[7],RESETB_READ
-	evbuf.i_last = ilast; //this is the marker that the event is ready
+	if (evtp!=&dump)
+		evbuf.i_written++; //this is the marker that the event is ready -- ROLLOVER ACCOUNTED FOR
 }
 
